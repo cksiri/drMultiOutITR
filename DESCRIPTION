@@ -1,0 +1,29 @@
+Package: drMultiOutITR
+Title: Doubly Robust Mixed-Outcome Individualized Treatment Ranking
+Version: 0.1.0
+Authors@R: person("Chathura", "Siriwardhana", email = "cksiri@hawaii.edu", role = c("aut", "cre", "cph"))
+Description: Doubly robust conditional distributional outcome estimation
+    and covariance-scaled rank aggregation for individualized treatment
+    selection using observational data. A unified fit-and-predict interface
+    supports multiple treatments and mixed continuous, ordinal, binary, and
+    censored survival outcomes. Flexible learners and cross-fitted nuisance
+    estimates are available; causal interpretation requires identification
+    and estimation assumptions.
+License: MIT + file LICENSE
+URL: https://github.com/cksiri/drMultiOutITR
+BugReports: https://github.com/cksiri/drMultiOutITR/issues
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Suggests:
+    testthat (>= 3.0.0),
+    ranger,
+    nnet,
+    survival,
+    randomForestSRC,
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+Depends:
+    R (>= 4.1.0)

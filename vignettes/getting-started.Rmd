@@ -1,0 +1,219 @@
+---
+title: "Getting started: three treatments and three outcome types"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started: three treatments and three outcome types}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+## What will I learn?
+
+This guide shows **how to fit the method and obtain treatment rankings**. Our
+fictional study has **three possible treatments** (`Care_A`, `Care_B`,
+`Care_C`) and **three different responses**:
+
+| Response | Data type | Favorable direction |
+|:--|:--|:--|
+| Length of stay (`stay`) | Continuous | Fewer days |
+| Wellbeing (`wellbeing`) | Ordered categories: Low, Medium, High | Higher category |
+| Survival (`survival`) | Right-censored follow-up | Higher survival probability |
+
+No real patient data are used. The model produces **model-based treatment
+rankings**, not proven benefits of any treatment. The deliberately small
+forests are for learning the software, not for a scientific analysis.
+
+**To run the entire toy example with one command**, install the package and use:
+
+```{r run-entire-example, eval=FALSE}
+library(drMultiOutITR)
+source(system.file("examples", "three_treatment_mixed_outcomes.R",
+                   package = "drMultiOutITR"))
+```
+
+If working in an extracted *source* project with `devtools::load_all()`, use
+`source("inst/examples/three_treatment_mixed_outcomes.R")` instead. The steps below
+explain the same script. Forest-fitting chunks are not run during vignette
+building; copy them into RStudio, or run the full script above.
+
+## Step 1. Prepare the data
+
+Each row is one person. Treatment, pretreatment covariates, and all three
+responses must be present in the training data.
+
+```{r toy-data, eval=FALSE}
+library(drMultiOutITR)
+set.seed(2026)
+n <- 300L
+age <- round(runif(n, 40, 80), 1)
+risk <- rnorm(n)
+group <- factor(sample(c("Group_1", "Group_2"), n, replace = TRUE))
+age10 <- (age - 60) / 10
+
+# The three treatments have different observational assignment probabilities.
+scores <- cbind(
+  Care_A = 0,
+  Care_B = 0.25 + 0.40 * risk - 0.15 * age10,
+  Care_C = -0.15 - 0.30 * risk + 0.20 * age10
+)
+p <- exp(scores - apply(scores, 1L, max))
+p <- p / rowSums(p)
+treatment <- vapply(seq_len(n), function(i)
+  sample(colnames(p), 1L, prob = p[i, ]), character(1L))
+treatment <- factor(treatment, levels = colnames(p))
+
+los_days <- pmax(1, round(8 + 0.8 * age10 + 1.3 * risk +
+  0.6 * (group == "Group_2") - 0.9 * (treatment == "Care_B") +
+  0.5 * (treatment == "Care_C") + rnorm(n, sd = 2.8), 1))
+latent <- -0.35 * risk - 0.10 * age10 + 0.35 * (treatment == "Care_C") +
+  rnorm(n)
+wellbeing <- ordered(cut(latent, c(-Inf, -0.5, 0.5, Inf),
+  labels = c("Low", "Medium", "High")),
+  levels = c("Low", "Medium", "High"))
+event_time <- rexp(n, rate = 0.014 * exp(0.35 * risk +
+  0.15 * age10 - 0.18 * (treatment == "Care_B")))
+censor_time <- rexp(n, rate = 0.005)
+followup_days <- pmin(event_time, censor_time, 180)
+status <- as.integer(event_time <= censor_time & event_time <= 180)
+
+study <- data.frame(treatment, age, risk, group, los_days,
+                    wellbeing, followup_days, status)
+table(study$treatment)
+```
+
+The survival columns are `followup_days` (observed follow-up duration) and
+`status` (`1` = event observed, `0` = censored). This example uses independent
+censoring by construction; real censoring mechanisms need careful assessment.
+
+## Step 2. Tell the package which outcomes matter
+
+```{r outcome-list, eval=FALSE}
+responses <- list(
+  stay = list(type = "continuous", column = "los_days",
+              direction = "lower", probs = c(0.25, 0.50, 0.75),
+              grid_length = 7L),
+  wellbeing = list(type = "ordinal", column = "wellbeing",
+                   direction = "higher"),
+  survival = list(type = "survival", time = "followup_days",
+                  status = "status", times = c(30, 90, 150),
+                  censoring = "pooled_km", min_G = 0.05)
+)
+```
+
+The model summarizes stay using three quantiles, wellbeing using probabilities
+of exceeding ordered categories, and survival using probabilities at days 30,
+90, and 150. **Outcome names must match the names used in `weights`.**
+
+## Step 3. Fit the individualized treatment rule
+
+```{r fit, eval=FALSE}
+fit <- fit_dr_itr(
+  data = study, treatment = "treatment",
+  covariates = c("age", "risk", "group"),
+  outcomes = responses,
+  weights = c(stay = 1/3, wellbeing = 1/3, survival = 1/3),
+  nuisance_folds = 2L,
+  num.trees = 60L, propensity_trees = 60L,
+  min.node.size = 8L, seed = 2026L
+)
+print(fit)
+```
+
+The `covariates` are recorded **before** treatment. The package fits adjustment
+and outcome models, then learns a ranking rule. Larger tree counts and other
+settings may be needed for a research analysis; do not regard the toy settings
+as recommendations for clinical use.
+
+## Step 4. Predict for new people
+
+New profiles contain **only baseline covariates**. They do not need an observed
+treatment or any of the three responses.
+
+```{r predict, eval=FALSE}
+new_profiles <- data.frame(
+  age = c(45, 55, 65, 75),
+  risk = c(-0.8, 0.2, 1.0, -0.2),
+  group = factor(c("Group_1", "Group_2", "Group_1", "Group_2"),
+                 levels = levels(study$group))
+)
+profile_ids <- paste0("Person_", seq_len(nrow(new_profiles)))
+result <- predict(fit, new_profiles, ids = profile_ids,
+                  return_summaries = TRUE)
+result$selection[, c("new_id", "best_treatment", "optimal_ranking")]
+head(result$summaries[, c("new_id", "outcome_id", "summary_id",
+                          "treatment", "theta_hat")], 12L)
+fit$treatments
+```
+
+Read the results as follows:
+
+* `best_treatment` is the first option in the model's ranking for that profile.
+* `optimal_ranking` gives the **rank assigned to each treatment in**
+  `fit$treatments` (1 = most preferred). It is **not** a list of treatments
+  in best-to-worst order. For example, if `fit$treatments` is
+  `c("Care_A", "Care_B", "Care_C")`, then `2-3-1` means Care C first,
+  Care A second, and Care B third. The `best_treatment` column names
+  the first choice directly.
+* `theta_hat` is the estimated conditional summary for that person under
+  each candidate treatment. For `stay`, it is a predicted quantile (in days);
+  for `wellbeing`, a probability associated with an ordered-category threshold;
+  and for `survival`, the estimated probability of surviving beyond the
+  indicated day. These are model-based predictions, not observed individual
+  counterfactuals or treatment effects.
+
+Rankings are **not** estimated gains from switching treatment, nor evidence
+that the model improves real-world outcomes.
+
+## Step 5. Change your outcome priorities
+
+```{r weight-change, eval=FALSE}
+prioritize_survival <- predict(
+  fit, new_profiles, ids = profile_ids,
+  weights = c(stay = 0.20, wellbeing = 0.20, survival = 0.60)
+)
+prioritize_survival[, c("new_id", "best_treatment")]
+```
+
+This changes the relative importance of the three outcomes **without fitting
+new forests**. Some rankings may change; they need not change for every
+example.
+
+## Step 6. Save the fitted model
+
+```{r save-reload, eval=FALSE}
+model_file <- tempfile(fileext = ".rds")
+saveRDS(fit, model_file)
+restored <- readRDS(model_file)
+reloaded <- predict(restored, new_profiles, ids = profile_ids,
+                    return_summaries = TRUE)
+stopifnot(identical(result$selection, reloaded$selection))
+stopifnot(identical(result$summaries, reloaded$summaries))
+unlink(model_file)
+```
+
+For **real** data, fitted models may retain sensitive information. Store them
+in a restricted-access location and do not publish patient-level predictions.
+
+## Optional example: observational RHC data
+
+For users who already hold the original prepared RHC study files, see the
+separate guide `vignette("rhc-local-data", package = "drMultiOutITR")`.
+It shows the same `fit_dr_itr()` and `predict()` interface using length of
+stay and survival at days 30, 90, and 150. It needs **local private files**;
+no participant data are included in the package. It is not the manuscript's
+full outer-five-fold validation.
+
+## Before using real results
+
+Check treatment overlap, missing data, factor levels, outcome definitions,
+follow-up support, and whether causal assumptions are defensible. The method's
+double robustness concerns the specified treatment/outcome nuisance components
+**conditional on a valid censoring estimator**; it does not resolve unmeasured
+confounding or guarantee policy benefit. If reporting treatment recommendations,
+state clearly that they are estimated rankings rather than established clinical
+benefits. Statistical validation and substantive interpretation require a
+study-specific analysis plan.

@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use drMultiOutITR in your research, please cite this software."
+type: software
+title: "drMultiOutITR: Doubly Robust Mixed-Outcome Individualized Treatment Ranking"
+authors:
+  - family-names: "Siriwardhana"
+    given-names: "Chathura"
+version: "0.1.0"
+license: MIT
+repository-code: "https://github.com/cksiri/drMultiOutITR"
+url: "https://github.com/cksiri/drMultiOutITR"

@@ -1,0 +1,10 @@
+^\.github$
+^\.gitignore$
+^.*\.Rproj$
+^\.Rhistory$
+^\.Rproj\.user$
+^CITATION\.cff$
+^CONTRIBUTING\.md$
+^LICENSE\.md$
+^doc$
+^Meta$
