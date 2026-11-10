@@ -1,5 +1,14 @@
 # drMultiOutITR — changes
 
+## 0.1.1 (public RHC tutorial update)
+
+- Added a reproducible RHC example using the original public Vanderbilt CSV,
+  including a lightweight data preparation function and optional local download.
+- Updated the RHC vignette and README to emphasize step-by-step package use.
+- Added references to the published foundational rank-based framework and the
+  observational-study manuscript; updated GitHub vignette installation guidance.
+- No changes to statistical implementation files or existing tests.
+
 ## 0.1.0 (first public release)
 
 - First public source release of the mixed-outcome individualized treatment

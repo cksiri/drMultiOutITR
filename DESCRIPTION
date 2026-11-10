@@ -1,6 +1,6 @@
 Package: drMultiOutITR
 Title: Doubly Robust Mixed-Outcome Individualized Treatment Ranking
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: person("Chathura", "Siriwardhana", email = "cksiri@hawaii.edu", role = c("aut", "cre", "cph"))
 Description: Doubly robust conditional distributional outcome estimation
     and covariance-scaled rank aggregation for individualized treatment

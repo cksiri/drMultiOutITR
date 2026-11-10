@@ -1,30 +1,28 @@
 # drMultiOutITR
 
-**Version 0.1.0.**
+**Version 0.1.1.**
 
 `drMultiOutITR` provides **doubly robust, individualized treatment
 rankings** for observational studies involving two or more treatments and
 mixed-type responses (continuous, ordinal, binary, and censored survival).
 Its main functions are `fit_dr_itr()` and `predict()`.
 
-The package's recommendations are **estimated treatment rankings**, not
-proven clinical benefits or independent estimates of policy value. Results
-require defensible confounding, positivity, outcome-model, and censoring
-assumptions.
+The package estimates treatment-specific outcome summaries and returns
+individualized treatment rankings. The main tutorial illustrates how to
+prepare data, fit a model, and interpret the output.
 
 ## Installation
 
-**From GitHub** (once the repository has been published):
+**From GitHub:**
 
 ```r
 install.packages("remotes")
-remotes::install_github("cksiri/drMultiOutITR")
+remotes::install_github("cksiri/drMultiOutITR", build_vignettes = TRUE)
 library(drMultiOutITR)
 ```
 
 Repository: [https://github.com/cksiri/drMultiOutITR](https://github.com/cksiri/drMultiOutITR).
-This link and command become usable after the GitHub repository is
-created and made accessible. The package is **not claimed to be on CRAN**.
+The package is available on GitHub; it is not listed on CRAN.
 
 **From a downloaded source folder** (also works before GitHub publication):
 
@@ -93,22 +91,35 @@ For explanations alongside each step, open:
 vignette("getting-started", package = "drMultiOutITR")
 ```
 
-## A little RHC example (optional)
+## Public RHC example (optional)
 
-A separate guide shows how the same functions can be applied to the original
-right-heart catheterization (RHC) analysis-ready cohort, with **two treatment
-choices**, length-of-stay quantiles, and survival at days **30, 90, and 150**.
-It is optional because prepared RHC analysis files are **not distributed** in
-this package. The `randomForestSRC` package is additionally required for the
-RHC demonstration's forest-based survival learner.
+A short tutorial uses the **public right-heart catheterization (RHC) data**
+from the [Vanderbilt Department of Biostatistics](https://hbiostat.org/data/).
+The example downloads the source CSV, prepares the outcomes and 48 baseline
+covariates, and predicts treatment rankings for a small held-out sample. The
+response types are hospital length of stay and survival at days 30, 90,
+and 150. There is no need to obtain the original research-project RDS files.
+
+```r
+# Requires ranger, survival, and a compatible randomForestSRC installation.
+library(drMultiOutITR)
+source(system.file("examples", "rhc_public_data.R",
+                   package = "drMultiOutITR"))
+rhc_example <- run_rhc_public_example()
+rhc_example$counts
+```
+
+If the dataset is already downloaded, pass `csv_file = "path/to/rhc.csv"`.
+The source dataset is **not included** in the package. Read the step-by-step
+vignette with:
 
 ```r
 vignette("rhc-local-data", package = "drMultiOutITR")
 ```
 
-This reduced-settings demonstration is **not** the manuscript's full
-outer-five-fold RHC evaluation, an independent policy-value analysis, or a
-clinical decision tool. Neither RHC nor DATOS participant records are bundled.
+Data source: Vanderbilt University Department of Biostatistics, based on
+Connors et al. (1996), *The effectiveness of right heart catheterization in
+the initial care of critically ill patients*, JAMA, 276:889–897.
 
 ## Using your own study data
 
@@ -123,29 +134,27 @@ clinical decision tool. Neither RHC nor DATOS participant records are bundled.
   new prediction profiles need only the same complete baseline covariates.
 - Call `fit_dr_itr()` to fit, then `predict()` to rank options for new profiles.
   You can pass alternative named `weights` to `predict()`.
-- Assess causal assumptions and estimator diagnostics before substantive
-  interpretation. The `censoring="pooled_km"` option requires censoring
-  independent of treatment and covariates; choose assumptions appropriate to
-  the study. Fixed propensity truncation and experimental survival-response
-  rounding can affect estimates. Rounding is **off by default**.
+For parameter options and requirements, see `?fit_dr_itr` and
+`?predict.dr_itr`. For the statistical framework and associated assumptions,
+consult the methodological references below.
 
-See `?fit_dr_itr` and `?predict.dr_itr` for the optional controls. The
-package does not automatically solve unmeasured confounding, censoring-model
-misspecification, or independent policy-value evaluation.
+## Methodological references and software citation
 
-## Citing the software
+The rank-based treatment-selection framework was introduced in:
 
-For a citation reflecting the installed package version, run:
+Siriwardhana, C., Gunaratnam, B., and Kulasekera, K. B. (2026).
+*A flexible rank-based framework for individualized treatment selection with
+mixed-type multivariate outcomes*. Statistical Methods in Medical Research.
+[doi:10.1177/09622802261454791](https://doi.org/10.1177/09622802261454791).
 
-```r
-citation("drMultiOutITR")
-```
+The observational-study extension implemented here is described in:
 
-The repository also includes a `CITATION.cff` file for GitHub's software
-citation interface. A separate methodological article should be cited when
-appropriate; its bibliographic details should be added only after they have
-been confirmed. A software citation is not a substitute for citing the
-underlying methodology.
+*Doubly Robust Rank-Based Individualized Treatment Selection in Observational
+Studies: A Flexible Framework for Mixed-Type Multivariate Outcomes*
+(manuscript; publication details to be added when available).
+
+To cite the software itself, run `citation("drMultiOutITR")`. The GitHub
+repository also provides a `CITATION.cff` file.
 
 ## Local development and package checks
 
@@ -160,12 +169,9 @@ devtools::build_vignettes()
 devtools::check()
 ```
 
-## Data privacy and scientific interpretation
+## Data and attribution
 
-No RHC or DATOS patient-level files, fitted models, or research outputs are
-included. Do not publish fitted models or individual predictions from private
-studies without authorization. The package provides model-based estimates and
-rankings; causal interpretation requires the study assumptions described above.
-
-For changes across development versions, see `NEWS.md`. Licensing and
-contributor information are listed in `DESCRIPTION` and `LICENSE`.
+The synthetic example requires no external data. The optional RHC example
+retrieves its data directly from Vanderbilt; no participant records or fitted
+models are bundled with the package. See `NEWS.md` for changes across versions
+and `DESCRIPTION` and `LICENSE` for authorship and licensing.

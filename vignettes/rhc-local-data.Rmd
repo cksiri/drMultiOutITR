@@ -1,8 +1,8 @@
 ---
-title: "Optional RHC example using local study files"
+title: "RHC example using public data"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Optional RHC example using local study files}
+  %\VignetteIndexEntry{RHC example using public data}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -11,93 +11,98 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-This optional guide illustrates how to use the **same fit-and-predict
-interface** with an observational RHC dataset. It is for users who already
-have access to the prepared analysis files; **none are included in the
-package**. New users should begin with the self-contained three-treatment,
-three-response [getting-started tutorial](getting-started.html).
+This short example shows how to use `drMultiOutITR` with the publicly
+available **right-heart catheterization (RHC)** dataset. The example compares
+`No RHC` and `RHC` using two responses: **hospital length of stay** and
+**survival at 30, 90, and 150 days**. If you are new to the package, start with
+the [three-treatment mixed-outcome tutorial](getting-started.html).
 
-Before running the code, install the package and its optional `ranger`,
-`survival`, and `randomForestSRC` dependencies. Keep all input and output files
-in an access-controlled research workspace.
+The data are available from the
+[Vanderbilt University Department of Biostatistics](https://hbiostat.org/data/),
+with the [RHC variable description](https://hbiostat.org/data/repo/rhc).
+The original study is Connors et al. (1996), *The effectiveness of right heart
+catheterization in the initial care of critically ill patients*, JAMA,
+276:889–897. Please acknowledge the study and the Vanderbilt data source when
+using the dataset.
 
-## RHC: local-data walkthrough
+## Step 1. Install the package
 
-The original right-heart catheterization (RHC) analysis contains **two**
-treatments (`No RHC`, `RHC`) and **two** response types: length of stay and
-censored survival. It is included here as a brief example of adapting the
-*same public functions* to a real research dataset; the three-treatment toy
-example above remains the recommended starting point.
-
-**RHC participant records are not shipped in the package.** The code below
-assumes your study team has already prepared the original analysis-ready RDS
-and the covariate specification CSV. Substitute your own secure file paths,
-and use the research-approved cohort and preprocessing.
-
-```{r rhc-optional, eval=FALSE}
-# Files already prepared in the original RHC study; not included here.
-rhc <- readRDS("PRIVATE_PATH/12_rhc_analysis_ready.rds")
-spec <- read.csv("PRIVATE_PATH/01_covariate_specification.csv")
-keep <- as.character(spec$included_primary) == "TRUE"
-baseline <- as.character(spec$variable[keep])
-stopifnot(length(baseline) == 48L,
-          all(c("A_label", "los_days", "surv_time_180", "event180",
-                baseline) %in% names(rhc)))
-for (v in baseline) {
-  if (is.character(rhc[[v]])) rhc[[v]] <- factor(rhc[[v]])
-}
-rhc$A_label <- factor(as.character(rhc$A_label),
-                      levels = c("No RHC", "RHC"))
-
-# Illustrative disjoint split; NOT the manuscript's outer-five-fold protocol.
-set.seed(20261107)
-by_arm <- split(seq_len(nrow(rhc)), rhc$A_label)
-heldout_ids <- unlist(lapply(by_arm, function(ix)
-  sample(ix, round(0.30 * length(ix)))))
-training_ids <- setdiff(seq_len(nrow(rhc)), heldout_ids)
-training_ids <- sort(sample(training_ids, 1600L))
-heldout_ids <- sort(sample(heldout_ids, 60L))
-training <- rhc[training_ids, , drop = FALSE]
-heldout <- rhc[heldout_ids, , drop = FALSE]
-
-# Reject previously unseen factor categories rather than silently recoding.
-novel <- vapply(baseline, function(v) {
-  if (!is.factor(training[[v]])) return(FALSE)
-  any(!as.character(heldout[[v]]) %in% as.character(training[[v]]))
-}, logical(1))
-if (any(novel)) stop("Unseen held-out factor levels; revise the split or preprocessing.")
-
-rhc_outcomes <- list(
-  stay = list(type = "continuous", column = "los_days",
-              direction = "lower", probs = c(0.25, 0.50, 0.75),
-              grid_length = 9L),
-  survival = list(type = "survival", time = "surv_time_180",
-                  status = "event180", times = c(30, 90, 150),
-                  censoring = "pooled_km", min_G = 0.05)
-)
-rhc_fit <- fit_dr_itr(training, "A_label", baseline, rhc_outcomes,
-  weights = c(stay = 0.5, survival = 0.5),
-  nuisance_folds = 2L, num.trees = 60L,
-  propensity_trees = 60L, min.node.size = 10L,
-  propensity_min_node_size = 50L,
-  survival_outcome_learner = "rsf", survival_num.trees = 60L,
-  seed = 20261107L)
-# Requires optional package randomForestSRC for the RSF learner.
-rhc_choices <- predict(rhc_fit, heldout[, baseline, drop = FALSE])
-table(rhc_choices$best_treatment)  # Aggregate only; do not export profiles.
+```{r installation, eval=FALSE}
+install.packages(c("remotes", "ranger", "survival", "knitr", "rmarkdown"))
+# The optional randomForestSRC package is also needed for this RHC example.
+# Install a version compatible with your R version.
+remotes::install_github("cksiri/drMultiOutITR", build_vignettes = TRUE)
+library(drMultiOutITR)
 ```
 
-This is a **small software demonstration**, not a reproduction of the RHC
-Stage 3 nested held-out study, a clinical recommendation tool, or an
-independent evaluation of causal policy value. Model validity additionally
-depends on exchangeability, positivity, outcome-model adequacy, and the
-assumptions behind the selected censoring method. In particular,
-`censoring="pooled_km"` assumes censoring independent of treatment and
-covariates; it may not suit all observational studies.
+## Step 2. Download and prepare the RHC data
 
-## What this example does not establish
+The public CSV has 5,735 records. The example follows the outcome construction
+and primary 48-covariate specification used in the RHC research workflow,
+excluding one record with a missing discharge date. The resulting analysis
+sample has **5,734 records**. Preparation is handled by a small script included
+with the package; no separate research files are required.
 
-The demonstration is **not** the manuscript's outer-five-fold held-out
-analysis, a prospective test, or an estimate of policy value. Use independent
-validation and study-specific confounding/censoring diagnostics for substantive
-analysis. Do not distribute fitted RHC models or person-level predictions.
+```{r prepare, eval=FALSE}
+example_file <- system.file("examples", "rhc_public_data.R",
+                            package = "drMultiOutITR")
+source(example_file)
+
+csv_file <- tempfile(fileext = ".csv")
+download.file("https://hbiostat.org/data/repo/rhc.csv",
+              destfile = csv_file, mode = "wb")
+rhc <- prepare_rhc_public_data(csv_file)
+unlink(csv_file)
+
+nrow(rhc$data)           # 5734
+length(rhc$covariates)   # 48
+table(rhc$data$A_label)
+```
+
+If your R session cannot download the CSV automatically, download it manually
+from the [Vanderbilt data page](https://hbiostat.org/data/), then pass the
+saved file path to `prepare_rhc_public_data("path/to/rhc.csv")`.
+
+## Step 3. Fit a small example and predict treatment rankings
+
+For convenience, the script also provides a one-call demonstration. It draws
+**1,600 training records** and **60 held-out records**, fits forests with
+**60 trees**, and prints treatment recommendation counts under three outcome
+weighting schemes. It does not repeat the original five-fold analysis.
+
+```{r run-example, eval=FALSE}
+# With Internet access, the function downloads the public CSV itself.
+rhc_example <- run_rhc_public_example()
+
+# Or, if you have already saved the public file:
+# rhc_example <- run_rhc_public_example(csv_file = "path/to/rhc.csv")
+
+rhc_example$counts
+```
+
+The three schemes are equal weights (`0.5`, `0.5`), length-of-stay-heavy
+(`0.7`, `0.3`), and survival-heavy (`0.3`, `0.7`). The model is fitted **once**;
+only the weights supplied to `predict()` change. The function returns the fitted
+model and aggregate recommendation counts without writing patient-level data or
+model files to disk.
+
+## Step 4. Apply the same procedure to your own data
+
+Define pretreatment covariates, the treatment column, continuous quantile
+summaries, and survival horizons. Fit with `fit_dr_itr()` and call `predict()`
+with new covariate profiles. The [getting-started tutorial](getting-started.html)
+shows the complete fit/predict interface with three treatments and three
+outcome types.
+
+**About this example:** The small training sample and tree counts are intended
+to demonstrate package usage. The published RHC study analysis used a more
+extensive held-out procedure; the numbers from this illustration should not be
+presented as a reproduction of that analysis.
+
+For the framework, estimation methods, and associated conditions, see
+Siriwardhana, Gunaratnam, and Kulasekera (2026),
+[*A flexible rank-based framework for individualized treatment selection with
+mixed-type multivariate outcomes*](https://doi.org/10.1177/09622802261454791),
+and the observational-study extension,
+*Doubly Robust Rank-Based Individualized Treatment Selection in Observational
+Studies: A Flexible Framework for Mixed-Type Multivariate Outcomes* (manuscript).
